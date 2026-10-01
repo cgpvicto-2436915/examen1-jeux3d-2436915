@@ -1,6 +1,9 @@
 using System.Collections;
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
+
+
 
 /// <summary>
 /// Objet représentant une boule contrôlée par le joueur.
@@ -10,6 +13,13 @@ public class Boule : MonoBehaviour
 {
     [SerializeField, Tooltip("La cible pour le suvi de la caméra")]
     private Transform cibleCamera;
+
+    [SerializeField]
+    private Indicateurs indicateur;
+
+
+    [SerializeField, Tooltip("Référence au texte affichant le nombre de charge.")]
+    TextMeshProUGUI texteNombreCharge;
 
     [SerializeField, Tooltip("Force de déplacement de la boule.")]
     private float forceDeplacement;
@@ -25,10 +35,45 @@ public class Boule : MonoBehaviour
     /// </summary>
     public Vector3 Velocite => rigidbody.linearVelocity;
 
-    private void Start()
+    [SerializeField, Tooltip("Nombre de charge max")]
+    private int NombreChargeMax;
+
+    private int chargeAcceleration;
+
+    private bool enAcceleration;
+
+    private void Awake()
     {
         rigidbody = GetComponent<Rigidbody>();
+        chargeAcceleration = 0;
+        enAcceleration = false;
     }
+
+    private void Start()
+    {
+
+
+        ControleurJeu.Instance.Controles.actions.FindAction("Commencer").performed += Lancer;
+    }
+
+    // lance la balle lorsque espace est presse
+    private void Lancer(InputAction.CallbackContext contexte)
+    {
+        if (ControleurJeu.Instance == null)
+            return;
+
+        PlayerInput controles = ControleurJeu.Instance.Controles;
+
+        if (controles == null)
+            return;
+        
+        controles.actions.FindAction("Diriger").performed += CommencerDirection;
+        controles.actions.FindAction("Diriger").canceled += ArreterDirection;
+        ControleurJeu.Instance.Controles.actions.FindAction("Acceleration").performed += Accelerer;
+        ControleurJeu.Instance.Controles.actions.FindAction("Commencer").performed -= Lancer;
+        rigidbody.useGravity = true;
+    }
+
 
     private void OnDestroy()
     {
@@ -42,6 +87,8 @@ public class Boule : MonoBehaviour
 
         controles.actions.FindAction("Diriger").performed -= CommencerDirection;
         controles.actions.FindAction("Diriger").canceled -= ArreterDirection;
+        ControleurJeu.Instance.Controles.actions.FindAction("Acceleration").performed -= Accelerer;
+        ControleurJeu.Instance.Controles.actions.FindAction("Commencer").performed -= Lancer;
     }
 
     private void Update()
@@ -50,11 +97,48 @@ public class Boule : MonoBehaviour
         {
             cibleCamera.position = rigidbody.position;
         }
+        
+        
     }
 
     private void FixedUpdate()
     {
         Diriger();
+        if (enAcceleration)
+        {
+            rigidbody.AddForce(Vector3.forward * 15f, ForceMode.Force);
+        }
+    }
+
+    //met la balle en mode acceleration et lance un delai de 1 secondes.
+    private void Accelerer(InputAction.CallbackContext contexte)
+    {
+        indicateur.AfficherCharge(chargeAcceleration);
+        if (!enAcceleration)
+        {
+            if (chargeAcceleration > 0)
+            {
+                enAcceleration = true;
+                chargeAcceleration--;
+                indicateur.AfficherCharge(chargeAcceleration);
+                StartCoroutine(DelaiAcceleration());
+            }
+        }
+
+    }
+
+    /// <summary>
+    /// la coroutine attend 1 second puis arrete l'acceleration
+    /// </summary>
+    /// <returns></returns>
+    private IEnumerator DelaiAcceleration()
+    {
+
+        yield return new WaitForSeconds(1);
+        
+        enAcceleration = false;
+        
+        
     }
 
     private void CommencerDirection(InputAction.CallbackContext contexte)
@@ -73,5 +157,20 @@ public class Boule : MonoBehaviour
         {
             rigidbody.AddForce(forceAppliquee, ForceMode.Force);
         }
+    }
+
+    //Ajoute une charge quand il en touche une et affiche le nombre de charge.
+    private void OnTriggerEnter(Collider other)
+    {
+        if (other.CompareTag("Charge"))
+        {
+            if(chargeAcceleration < NombreChargeMax)
+                    {
+                        Destroy(other.gameObject);
+                        chargeAcceleration++;
+                        indicateur.AfficherCharge(chargeAcceleration);
+                    }
+        }
+        
     }
 }
